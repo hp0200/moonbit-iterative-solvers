@@ -19,10 +19,10 @@
 
 已核实的上游公开仓库能力仅包括：
 
-- CSR 稀疏存储。
-- 数值诊断工具。
-- 19 个测试用例。
-- CI 工作流。
+- CSR 稀疏存储：`SparseMatrix`、`from_dense`、`to_dense`、`spmv`、`transpose`（`csr.mbt`）。
+- 数值诊断工具：`is_diagonally_dominant`（`diagnostic.mbt`）与 `estimate_conditioning`（`diagnostic_ext.mbt`）。
+- `test.mbt` 中的 10 个测试用例。
+- `.github/workflows/ci.yml` 工作流。
 
 上述列表是本项目文档中允许引用的全部上游能力边界。上游自身不定义算术 trait；环约束 `Ring` 来自第三方包 `Luna-Flow/luna-generic`，本库同样依赖该包，版本为 `0.4.0`。
 
