@@ -21,10 +21,10 @@
 
 已核实的上游公开仓库能力只有：
 
-- CSR 稀疏存储。
-- 数值诊断工具。
-- 19 个测试用例。
-- CI 工作流。
+- CSR 稀疏存储：`SparseMatrix`、`from_dense`、`to_dense`、`spmv`、`transpose`（`csr.mbt`）。
+- 数值诊断工具：`is_diagonally_dominant`（`diagnostic.mbt`）、`estimate_conditioning`（`diagnostic_ext.mbt`）。
+- `test.mbt` 中的 10 个测试用例。
+- `.github/workflows/ci.yml` 工作流。
 
 禁止把 PCG 求解器、CSC 格式转换、SpGEMM、WebAssembly 零拷贝描述为上游已有能力。
 
