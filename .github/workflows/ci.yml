@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - wasm-gc
+          - js
+          - native
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MoonBit
+        uses: moonbitlang/setup-moonbit@v1
+        with:
+          version: latest
+
+      - name: Show toolchain version
+        run: moon version
+
+      - name: Build
+        run: moon build --target ${{ matrix.target }}
+
+  format:
+    name: format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MoonBit
+        uses: moonbitlang/setup-moonbit@v1
+        with:
+          version: latest
+
+      - name: Show toolchain version
+        run: moon version
+
+      - name: Check formatting
+        run: moon fmt --check
