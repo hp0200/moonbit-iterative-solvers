@@ -22,7 +22,7 @@
 - 本库依赖上游公开能力；上游对本库零依赖。
 - 本库不为上游矩阵增加包装类型，求解入口为包级函数。
 
-已核实的上游公开仓库能力仅包括 CSR 稀疏存储、数值诊断工具、19 个测试用例与 CI 工作流。本文不把这些之外的求解器、格式转换、乘法内核或导出能力归因于上游。
+已核实的上游公开仓库能力仅包括 CSR 稀疏存储（`SparseMatrix`、`from_dense`、`to_dense`、`spmv`、`transpose`，见 `csr.mbt`）、数值诊断工具（`is_diagonally_dominant`，见 `diagnostic.mbt`；`estimate_conditioning`，见 `diagnostic_ext.mbt`）、`test.mbt` 中的 10 个测试用例，以及 `.github/workflows/ci.yml` 工作流。本文不把这些之外的求解器、格式转换、乘法内核或导出能力归因于上游。
 
 ## 依赖拓扑定位
 
