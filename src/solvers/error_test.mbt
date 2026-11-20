@@ -1,0 +1,19 @@
+///|
+test "solver error descriptions name their trigger conditions" {
+  assert_eq(
+    @solvers.DimensionMismatch.description(),
+    @solvers.SolverError::dimension_mismatch_reason(),
+  )
+  assert_eq(
+    @solvers.MaxIterExceeded.description(),
+    @solvers.SolverError::max_iter_exceeded_reason(),
+  )
+  assert_eq(
+    @solvers.Breakdown.description(),
+    @solvers.SolverError::breakdown_reason(),
+  )
+  assert_eq(
+    @solvers.ZeroDiagonal.description(),
+    @solvers.SolverError::zero_diagonal_reason(),
+  )
+}
