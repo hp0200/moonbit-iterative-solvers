@@ -1,4 +1,4 @@
 import {
-  "hp0200/moonbit-iterative-solvers/algebra" @algebra,
-  "hp0200/moonbit-iterative-solvers/workspace" @workspace,
+  "hp0200/moonbit-iterative-solvers/algebra",
+  "hp0200/moonbit-iterative-solvers/workspace",
 }
