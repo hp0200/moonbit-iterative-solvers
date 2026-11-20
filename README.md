@@ -1,6 +1,6 @@
 # moonbit-iterative-solvers
 
-`moonbit-iterative-solvers` 是一个独立的新 MoonBit 开源项目，面向稀疏线性方程组的迭代求解。稀疏矩阵存储与数值诊断由既有开源库 `hp0200/moonbit-sparse-math` 提供；本库不重复实现这两部分。两者是单向依赖的互补关系：本库依赖上游，上游对本库零依赖。本期交付泛型能力层、迭代工作区、共轭梯度（CG）与 Jacobi 预条件。
+`moonbit-iterative-solvers` 是一个独立的新 MoonBit 开源项目，面向稀疏线性方程组的迭代求解。稀疏矩阵存储与数值诊断由既有开源库 `hp0200/moonbit-sparse-math` 提供；本库不重复实现这两部分。两者是单向依赖的互补关系：本库依赖上游，上游对本库零依赖。当前实现包含泛型能力层、迭代工作区、共轭梯度（CG）、Jacobi 预条件、BiCGSTAB 与两个可运行示例。
 
 ## 项目定位
 
@@ -8,7 +8,7 @@
 
 - 提供迭代求解所需的数值抽象与能力约束。
 - 组织可复用的迭代工作区与求解流程。
-- 交付共轭梯度法与 Jacobi 预条件。
+- 交付共轭梯度法、BiCGSTAB 与 Jacobi 预条件。
 - 以明确的错误值报告数值失效，不通过 panic 终止调用方。
 
 稀疏矩阵存储、CSR 数据组织与数值诊断不是本库的职责。本库只通过依赖关系使用上游公开能力。
@@ -28,48 +28,71 @@
 
 ## 本期范围
 
-本期承诺只有四项：
+当前已交付：
 
 - 泛型能力层。
 - 迭代工作区。
 - 共轭梯度 CG。
 - Jacobi 预条件。
+- BiCGSTAB，包括转置残差点积。
+- SIR 单步与 PageRank 稳态示例。
 
-本期不实现超过上述四项的求解算法，也不交付 wasm/js 导出层。路线图见 `docs/milestones.md`。
+wasm/js 导出层仍不在当前交付内。路线图见 `docs/milestones.md`。
 
 ## API 设计原则
 
 - 不新增上游矩阵类型的包装类型；求解器以包级函数公开，例如 `cg_solve`。
-- 本库定义独立 trait `FieldSafe`，它不继承 `Ring`。求解器使用多重约束 `[T : Ring + FieldSafe]`。
+- 本库定义独立 trait `FieldSafe`，它不继承 `Ring`；泛型代数组件使用多重约束 `[T : Ring + FieldSafe]`。
+- 当前公开求解入口使用具体 `Double`，与上游仅支持 `Double` 的 CSR 一致；见 `docs/adr/0006-concrete-double-solver-entrypoints.md`。
 - `FieldSafe` 只提供除零可检测的 `div_safe(Self, Self) -> Option[Self]`，不重新定义加减乘。
 - 残差范数、容差、右端项范数与 breakdown 阈值统一使用 `Double`；泛型参数 `T` 只承担向量与矩阵代数，并通过 `ToDouble` 进入实数判据。
 - 整数类型不实现 `FieldSafe`，从类型系统层面拒绝整数求解器实例化。
 - 预条件子使用 enum 做静态分派，不使用 trait object。
 - 求解器采用位置参数，返回值携带错误信息；数值失效不使用 panic。
 
-```text
-// 签名示意，非最终代码
-cg_solve(matrix, rhs, initial_guess, tolerance, max_iter, preconditioner)
-    -> result carrying either the solution or a numerical error
+```moonbit
+pub fn cg_solve(
+  csr : @sparse.SparseMatrix[Double],
+  b : Array[Double],
+  tol : Double,
+  max_iter : Int,
+  precond : @precond.Preconditioner,
+) -> Result[SolverOutcome, SolverError]
+
+pub fn bicgstab_solve(
+  csr : @sparse.SparseMatrix[Double],
+  b : Array[Double],
+  tol : Double,
+  max_iter : Int,
+  precond : @precond.Preconditioner,
+) -> Result[SolverOutcome, SolverError]
 ```
 
 ## 目录结构
 
 ```text
-src/algebra/      泛型数值能力与 trait 定义（当前仅有包清单）
-src/precond/      预条件构造与静态分派支持（当前仅有包清单）
-src/workspace/    迭代工作区（当前仅有包清单）
-src/solvers/      CG、Jacobi 预条件与求解入口（当前仅有包清单）
+src/algebra/      泛型数值能力与 trait 定义
+src/precond/      Jacobi 对角提取与静态分派入口
+src/workspace/    可复用 Krylov 工作向量
+src/solvers/      CG、BiCGSTAB、错误与统一结果类型
 src/wasm/         wasm/js 导出层占位（本期无 imports、无导出实现）
+examples/         可运行的 SIR 与 PageRank 示例
 docs/adr/         架构决定记录
 docs/             架构、错误、测试、基准、里程碑与发布文档
 ```
 
-本仓库当前处于脚手架阶段：五个包目录使用 DSL `moon.pkg`，本库包目录内没有 `.mbt` 实现或测试文件。
+核心包使用 DSL `moon.pkg`。`src/wasm` 仍未提供导出实现；数值失效通过错误值返回，不通过 panic 终止求解。
 
 ## 本地协作
 
 本库与上游通过仓库根目录的 `moon.work` 组织工作区，两库目录须为同级。开发期 `moon.mod` 保留精确版本号，由工作区将同名上游模块解析为同级本地源码；发布前必须按 `docs/publishing-checklist.md` 确认 registry 版本可用且发布不依赖本地解析。
+
+示例位于独立的本地示例模块中。当前工作区下运行：
+
+```bash
+moon run examples/sir_step_app --target wasm-gc
+moon run examples/pagerank_app --target wasm-gc
+```
 
 ## 文档
 
