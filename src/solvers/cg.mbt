@@ -33,6 +33,53 @@ fn matvec(
 }
 
 ///|
+fn validate_csr_geometry(
+  csr : @sparse.SparseMatrix[Double],
+) -> Result[Unit, SolverError] {
+  if csr.row_ptr.length() == 0 {
+    return Err(DimensionMismatch)
+  }
+  let n = csr.row_ptr.length() - 1
+  if csr.col_indices.length() != csr.values.length() {
+    return Err(DimensionMismatch)
+  }
+  if csr.row_ptr[0] != 0 || csr.row_ptr[n] != csr.values.length() {
+    return Err(DimensionMismatch)
+  }
+  for row = 0; row < n; row = row + 1 {
+    let start = csr.row_ptr[row]
+    let end = csr.row_ptr[row + 1]
+    if start < 0 || end < start || end > csr.values.length() {
+      return Err(DimensionMismatch)
+    }
+  }
+  for position = 0; position < csr.col_indices.length(); position = position + 1 {
+    let column = csr.col_indices[position]
+    if column < 0 || column >= n {
+      return Err(DimensionMismatch)
+    }
+  }
+  Ok(())
+}
+
+///|
+fn recompute_residual_norm(
+  csr : @sparse.SparseMatrix[Double],
+  b : Array[Double],
+  x : Array[Double],
+  storage : Array[Double],
+) -> Result[Double, SolverError] {
+  let product = match matvec(csr, x) {
+    Ok(values) => values
+    Err(error) => return Err(error)
+  }
+  for i = 0; i < b.length(); i = i + 1 {
+    storage[i] = b[i] - product[i]
+  }
+  Ok(@algebra.norm_real(storage))
+}
+
+///|
 fn load_matvec(
   csr : @sparse.SparseMatrix[Double],
   vector : Array[Double],
@@ -81,6 +128,10 @@ pub fn cg_solve(
   if b.length() != n {
     return Err(DimensionMismatch)
   }
+  match validate_csr_geometry(csr) {
+    Err(error) => return Err(error)
+    Ok(_) => ()
+  }
   let x = Array::make(n, 0.0)
   let workspace = @workspace.KrylovWorkspace::make(n)
   workspace.reset(b)
@@ -115,12 +166,24 @@ pub fn cg_solve(
     }
     let residual_norm = @algebra.norm_real(workspace.s)
     if residual_is_small(residual_norm, tol, rhs_norm) {
-      return Ok(SolverOutcome::new(x, iteration + 1, residual_norm))
+      let true_residual = match
+        recompute_residual_norm(csr, b, x, workspace.r) {
+        Ok(value) => value
+        Err(error) => return Err(error)
+      }
+      return Ok(SolverOutcome::new(x, iteration + 1, true_residual))
     }
     let rz_new = rz_product(precond, workspace.s, workspace.t)
     let beta = match @algebra.FieldSafe::div_safe(rz_new, rz) {
       Some(value) => value
-      None => return Ok(SolverOutcome::new(x, iteration + 1, residual_norm))
+      None => {
+        let true_residual = match
+          recompute_residual_norm(csr, b, x, workspace.r) {
+          Ok(value) => value
+          Err(error) => return Err(error)
+        }
+        return Ok(SolverOutcome::new(x, iteration + 1, true_residual))
+      }
     }
     @algebra.scale(beta, workspace.p)
     @algebra.axpy(1.0, workspace.t, workspace.p)
