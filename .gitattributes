@@ -1,2 +1,9 @@
-*.mbt linguist-language=MoonBit
-moon.mod linguist-documentation
+/.gitattributes text eol=lf
+
+# MoonBit source files
+*.mbt linguist-language=MoonBit eol=lf
+*.mbti linguist-language=MoonBit eol=lf
+
+# MoonBit module manifests are not source code
+moon.mod linguist-vendored
+moon.pkg linguist-vendored
