@@ -1,8 +1,5 @@
-pub fn[T : @luna_generic.Ring] axpy(
-  a : T,
-  x : Array[T],
-  y : Array[T],
-) -> Unit {
+///|
+pub fn[T : @luna_generic.Ring] axpy(a : T, x : Array[T], y : Array[T]) -> Unit {
   guard x.length() == y.length() else {
     abort("axpy: vectors must have equal length")
   }
