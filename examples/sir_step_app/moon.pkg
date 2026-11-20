@@ -1,0 +1,5 @@
+import {
+  "hp0200/moonbit-iterative-solvers-examples" @examples,
+}
+
+pkgtype(kind: "executable")
