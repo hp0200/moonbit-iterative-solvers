@@ -28,6 +28,10 @@ pub fn bicgstab_solve(
   if b.length() != n {
     return Err(DimensionMismatch)
   }
+  match validate_csr_geometry(csr) {
+    Err(error) => return Err(error)
+    Ok(_) => ()
+  }
   let x = Array::make(n, 0.0)
   let workspace = @workspace.KrylovWorkspace::make(n)
   workspace.reset(b)
@@ -103,7 +107,12 @@ pub fn bicgstab_solve(
     @algebra.axpy(-alpha, workspace.ap, workspace.s)
     let s_norm = @algebra.norm_real(workspace.s)
     if residual_is_small(s_norm, tol, rhs_norm) {
-      return Ok(SolverOutcome::new(x, iteration + 1, s_norm))
+      let true_residual = match
+        recompute_residual_norm(csr, b, x, workspace.r) {
+        Ok(value) => value
+        Err(error) => return Err(error)
+      }
+      return Ok(SolverOutcome::new(x, iteration + 1, true_residual))
     }
 
     // z = apply(precond, s)
@@ -137,7 +146,12 @@ pub fn bicgstab_solve(
     @algebra.axpy(-omega, workspace.t, workspace.r)
     let residual_norm = @algebra.norm_real(workspace.r)
     if residual_is_small(residual_norm, tol, rhs_norm) {
-      return Ok(SolverOutcome::new(x, iteration + 1, residual_norm))
+      let true_residual = match
+        recompute_residual_norm(csr, b, x, workspace.s) {
+        Ok(value) => value
+        Err(error) => return Err(error)
+      }
+      return Ok(SolverOutcome::new(x, iteration + 1, true_residual))
     }
 
     // rho_previous = rho for the next beta update.
