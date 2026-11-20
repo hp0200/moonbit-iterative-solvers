@@ -48,7 +48,9 @@ test "CG solves a 3x3 SPD system and satisfies the residual bound" {
   for i = 0; i < 3; i = i + 1 {
     residual[i] = b[i] - ax[i]
   }
-  assert_true(@algebra.norm_real(residual) <= 1.0e-12 * @algebra.norm_real(b))
+  let true_residual = @algebra.norm_real(residual)
+  assert_true(true_residual <= 1.0e-12 * @algebra.norm_real(b))
+  assert_close(outcome.final_residual, true_residual, 1.0e-15)
   assert_eq(b, original_b)
 }
 
@@ -57,6 +59,16 @@ test "CG returns DimensionMismatch for a short right-hand side" {
   let a = @sparse.from_dense([[2.0, 0.0], [0.0, 3.0]], 0.0)
   expect_cg_error(
     @solvers.cg_solve(a, [2.0], 1.0e-12, 10, @precond.None),
+    @solvers.DimensionMismatch,
+  )
+}
+
+///|
+test "CG rejects malformed CSR column geometry" {
+  let malformed = @sparse.from_dense([[2.0, 0.0], [0.0, 3.0]], 0.0)
+  malformed.col_indices[0] = 9
+  expect_cg_error(
+    @solvers.cg_solve(malformed, [2.0, 3.0], 1.0e-12, 10, @precond.None),
     @solvers.DimensionMismatch,
   )
 }
