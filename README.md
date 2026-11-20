@@ -52,7 +52,7 @@ wasm/js 导出层仍不在当前交付内。路线图见 `docs/milestones.md`。
 
 ```moonbit
 pub fn cg_solve(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   b : Array[Double],
   tol : Double,
   max_iter : Int,
@@ -60,7 +60,7 @@ pub fn cg_solve(
 ) -> Result[SolverOutcome, SolverError]
 
 pub fn bicgstab_solve(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   b : Array[Double],
   tol : Double,
   max_iter : Int,

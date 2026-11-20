@@ -24,7 +24,7 @@ pub fn PreconditionerError::description(self : PreconditionerError) -> String {
 
 ///|
 pub fn diag_of_csr(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
 ) -> Result[Array[Double], PreconditionerError] {
   let n = csr.row_ptr.length() - 1
   let diagonal = Array::make(n, 0.0)
@@ -59,7 +59,7 @@ fn validate_vector_lengths(
 ///|
 pub fn apply(
   precond : Preconditioner,
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   r : Array[Double],
   z : Array[Double],
 ) -> Result[Unit, PreconditionerError] {
@@ -93,7 +93,7 @@ pub fn apply(
 
 ///|
 pub fn apply_none(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   r : Array[Double],
   z : Array[Double],
 ) -> Result[Unit, PreconditionerError] {
@@ -102,7 +102,7 @@ pub fn apply_none(
 
 ///|
 pub fn apply_jacobi(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   r : Array[Double],
   z : Array[Double],
 ) -> Result[Unit, PreconditionerError] {

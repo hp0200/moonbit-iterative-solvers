@@ -18,7 +18,7 @@ pub fn run_pagerank() -> Unit {
     }
     dense.push(row)
   }
-  let csr = @sparse.from_dense(dense, 0.0)
+  let csr = @sparse.from_dense(dense)
   let teleport = (1.0 - damping) / 5.0
   let rhs = Array::make(n, teleport)
   match @solvers.bicgstab_solve(csr, rhs, 1.0e-12, 200, @precond.None) {

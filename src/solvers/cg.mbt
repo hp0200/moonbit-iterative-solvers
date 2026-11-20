@@ -11,7 +11,7 @@ fn map_preconditioner_error(
 ///|
 fn precondition(
   precond : @precond.Preconditioner,
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   source : Array[Double],
   target : Array[Double],
 ) -> Result[Unit, SolverError] {
@@ -23,18 +23,15 @@ fn precondition(
 
 ///|
 fn matvec(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   vector : Array[Double],
 ) -> Result[Array[Double], SolverError] {
-  match @sparse.spmv(csr, vector) {
-    Ok(product) => Ok(product)
-    Err(_) => Err(DimensionMismatch)
-  }
+  Ok(@sparse.spmv(csr, vector))
 }
 
 ///|
 fn validate_csr_geometry(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
 ) -> Result[Unit, SolverError] {
   if csr.row_ptr.length() == 0 {
     return Err(DimensionMismatch)
@@ -64,7 +61,7 @@ fn validate_csr_geometry(
 
 ///|
 fn recompute_residual_norm(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   b : Array[Double],
   x : Array[Double],
   storage : Array[Double],
@@ -81,7 +78,7 @@ fn recompute_residual_norm(
 
 ///|
 fn load_matvec(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   vector : Array[Double],
   target : Array[Double],
 ) -> Result[Unit, SolverError] {
@@ -118,7 +115,7 @@ fn rz_product(
 
 ///|
 pub fn cg_solve(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   b : Array[Double],
   tol : Double,
   max_iter : Int32,

@@ -11,7 +11,7 @@ pub fn run_sir_step() -> Unit {
     }
     dense.push(row)
   }
-  let csr = @sparse.from_dense(dense, 0.0)
+  let csr = @sparse.from_dense(dense)
   let rhs = [6.0, 10.0, 8.0]
   match @solvers.cg_solve(csr, rhs, 1.0e-12, 50, @precond.None) {
     Ok(outcome) => {

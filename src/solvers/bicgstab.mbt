@@ -18,7 +18,7 @@ fn reciprocal_ratio(
 
 ///|
 pub fn bicgstab_solve(
-  csr : @sparse.SparseMatrix[Double],
+  csr : @sparse.SparseMatrix,
   b : Array[Double],
   tol : Double,
   max_iter : Int32,
