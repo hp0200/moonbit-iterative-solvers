@@ -1,110 +1,292 @@
 # moonbit-iterative-solvers
 
-`moonbit-iterative-solvers` 是一个独立的新 MoonBit 开源项目，面向稀疏线性方程组的迭代求解。稀疏矩阵存储与数值诊断由既有开源库 `hp0200/moonbit-sparse-math` 提供；本库不重复实现这两部分。两者是单向依赖的互补关系：本库依赖上游，上游对本库零依赖。当前实现包含泛型能力层、迭代工作区、共轭梯度（CG）、Jacobi 预条件、BiCGSTAB 与两个可运行示例。
+**Zero-dependency numerical diagnostics and verification for AI agents.**
 
-## 项目定位
+`hp0200/moonbit-iterative-solvers` · version `0.0.1` · Apache-2.0
 
-本库的目标赛事方向为 MoonBit 黑客松（高性能数值计算扩展），按新项目方向组织。项目的职责边界是：
+This library gives numerical code an explicit boundary between a solver and the
+agent using it. It provides structured failure data, an independent residual
+check, and a small dense reference solver. It is implemented in pure MoonBit and
+declares no external package dependencies.
 
-- 提供迭代求解所需的数值抽象与能力约束。
-- 组织可复用的迭代工作区与求解流程。
-- 交付共轭梯度法、BiCGSTAB 与 Jacobi 预条件。
-- 以明确的错误值报告数值失效，不通过 panic 终止调用方。
+## Why
 
-稀疏矩阵存储、CSR 数据组织与数值诊断不是本库的职责。本库只通过依赖关系使用上游公开能力。
+AI agents calling numerical code need more than a returned number. The dangerous
+failures are often quiet:
 
-## 上游依赖
+- a result becomes `NaN` or infinity, but the call still appears to succeed;
+- a solver never meets its tolerance and the caller cannot tell why;
+- matrix and vector dimensions do not agree;
+- an agent cannot independently check whether a proposed solution is usable.
 
-上游为 `hp0200/moonbit-sparse-math`，当前版本 `0.2.1`，许可证 Apache-2.0。本库声明依赖但不复制、改写或包装上游矩阵类型。
+This library turns those cases into ordinary data: stable error codes, an agent
+repair hint, key-value context, and a verification report computed from the
+original `A`, `b`, and `x`.
 
-已核实的上游公开仓库能力仅包括：
+The scope is deliberately narrow: solver-facing diagnostics and verification,
+not low-level matrix kernels or high-performance numerical infrastructure.
 
-- CSR 稀疏存储：`SparseMatrix`、`from_dense`、`to_dense`、`spmv`、`transpose`（`csr.mbt`）。
-- 数值诊断工具：`is_diagonally_dominant`（`diagnostic.mbt`）与 `estimate_conditioning`（`diagnostic_ext.mbt`）。
-- `test.mbt` 中的 10 个测试用例。
-- `.github/workflows/ci.yml` 工作流。
+## Features at a glance
 
-上述列表是本项目文档中允许引用的全部上游能力边界。上游自身不定义算术 trait；环约束 `Ring` 来自第三方包 `Luna-Flow/luna-generic`，本库同样依赖该包，版本为 `0.4.0`。
+| Package | Capability |
+| --- | --- |
+| `src/diagnostics` | `SolverDiagnostic` with `error_code`, `message`, `agent_hint`, and `context` |
+| `src/verification` | `verify_solution`, which independently recomputes `b - Ax` |
+| `src/solvers` | `solve`, a zero-dependency dense reference conjugate-gradient implementation |
 
-## 本期范围
+### Structured diagnostics
 
-当前已交付：
+`SolverDiagnostic` is a public enum whose `Report` payload contains:
 
-- 泛型能力层。
-- 迭代工作区。
-- 共轭梯度 CG。
-- Jacobi 预条件。
-- BiCGSTAB，包括转置残差点积。
-- SIR 单步与 PageRank 稳态示例。
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `error_code` | `String` | Stable machine-readable code, such as `SINGULAR_PIVOT` or `MAX_ITER_EXCEEDED` |
+| `message` | `String` | Human-readable explanation |
+| `agent_hint` | `String` | Suggested recovery action for an AI agent |
+| `context` | `Map[String, String]` | Additional evidence such as matrix size or iteration count |
 
-wasm/js 导出层仍不在当前交付内。路线图见 `docs/milestones.md`。
+The diagnostics module defines codes including `EMPTY_SYSTEM`,
+`NON_SQUARE_MATRIX`, `RAGGED_MATRIX`, `DIMENSION_MISMATCH`,
+`NON_FINITE_INPUT`, `INVALID_TOLERANCE`, `INVALID_MAX_ITERATIONS`,
+`SINGULAR_PIVOT`, `BREAKDOWN`, `MAX_ITER_EXCEEDED`, and
+`NON_FINITE_RESIDUAL`.
 
-## API 设计原则
+### Independent verification
 
-- 不新增上游矩阵类型的包装类型；求解器以包级函数公开，例如 `cg_solve`。
-- 本库定义独立 trait `FieldSafe`，它不继承 `Ring`；泛型代数组件使用多重约束 `[T : Ring + FieldSafe]`。
-- 当前公开求解入口使用具体 `Double`，与上游仅支持 `Double` 的 CSR 一致；见 `docs/adr/0006-concrete-double-solver-entrypoints.md`。
-- `FieldSafe` 只提供除零可检测的 `div_safe(Self, Self) -> Option[Self]`，不重新定义加减乘。
-- 残差范数、容差、右端项范数与 breakdown 阈值统一使用 `Double`；泛型参数 `T` 只承担向量与矩阵代数，并通过 `ToDouble` 进入实数判据。
-- 整数类型不实现 `FieldSafe`，从类型系统层面拒绝整数求解器实例化。
-- 预条件子使用 enum 做静态分派，不使用 trait object。
-- 求解器采用位置参数，返回值携带错误信息；数值失效不使用 panic。
+`verify_solution` does not inspect solver state. It recomputes the residual
+`r = b - Ax` and returns a `VerificationReport` with:
 
-```moonbit
-pub fn cg_solve(
-  csr : @sparse.SparseMatrix,
-  b : Array[Double],
-  tol : Double,
-  max_iter : Int,
-  precond : @precond.Preconditioner,
-) -> Result[SolverOutcome, SolverError]
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `residual_norm` | `Float` | `||b - Ax||` |
+| `relative_error` | `Float` | `||b - Ax|| / ||b||`, or the absolute residual when `b` is zero |
+| `is_valid` | `Bool` | Whether the report passes the default verification tolerance |
 
-pub fn bicgstab_solve(
-  csr : @sparse.SparseMatrix,
-  b : Array[Double],
-  tol : Double,
-  max_iter : Int,
-  precond : @precond.Preconditioner,
-) -> Result[SolverOutcome, SolverError]
-```
+The default verification tolerance is `1.0e-5`. An invalid shape or non-finite
+input produces an invalid report; `verify_solution_with_diagnostic` is available
+when the caller needs the corresponding `SolverDiagnostic`.
 
-## 目录结构
+### Reference CG solver
+
+`solve` is a compact dense conjugate-gradient implementation intended to exercise
+the diagnostics-and-verification loop:
+
+- fixed relative tolerance: `cg_tolerance = 1.0e-5`;
+- fixed iteration budget: `cg_max_iterations = 1000`;
+- dense `Array[Array[Float]]` input;
+- symmetric positive-definite systems;
+- dimension, shape, and non-finite input checks before iteration;
+- diagnostics for singular pivots, breakdown, residual failure, and budget
+  exhaustion;
+- no panic and no non-finite `Ok` solution.
+
+A regression test covers a `2x1` matrix, confirming that the short-column shape
+returns `NON_SQUARE_MATRIX` instead of indexing out of bounds.
+
+This is a reference implementation, not a high-performance solver. It is meant
+to make the diagnosis and verification contract concrete and testable.
+
+## Zero dependencies
+
+There is no `moon.mod.json` and no `moon.work` in this repository. The complete
+`moon.mod` is:
 
 ```text
-src/algebra/      泛型数值能力与 trait 定义
-src/precond/      Jacobi 对角提取与静态分派入口
-src/workspace/    可复用 Krylov 工作向量
-src/solvers/      CG、BiCGSTAB、错误与统一结果类型
-src/wasm/         wasm/js 导出层占位（本期无 imports、无导出实现）
-examples/         可运行的 SIR 与 PageRank 示例
-docs/adr/         架构决定记录
-docs/             架构、错误、测试、基准、里程碑与发布文档
+name = "hp0200/moonbit-iterative-solvers"
+
+version = "0.0.1"
+
+license = "Apache-2.0"
+
+description = "Zero-dependency numerical diagnostics and verification for AI agents in MoonBit."
+
+readme = "README.md"
+
+repository = "https://github.com/hp0200/moonbit-iterative-solvers"
+
+source = "src"
 ```
 
-核心包使用 DSL `moon.pkg`。`src/wasm` 仍未提供导出实现；数值失效通过错误值返回，不通过 panic 终止求解。
+It contains no `import`, `deps`, or `bin-deps` declaration. The only package
+imports are internal to this module:
 
-## 本地协作
-
-本库与上游通过仓库根目录的 `moon.work` 组织工作区，两库目录须为同级。开发期 `moon.mod` 保留精确版本号，由工作区将同名上游模块解析为同级本地源码；发布前必须按 `docs/publishing-checklist.md` 确认 registry 版本可用且发布不依赖本地解析。
-
-示例位于独立的本地示例模块中。当前工作区下运行：
-
-```bash
-moon run examples/sir_step_app --target wasm-gc
-moon run examples/pagerank_app --target wasm-gc
+```text
+src/verification ──▶ src/diagnostics
+src/solvers      ──▶ src/diagnostics
 ```
 
-## 文档
+No external package needs to be resolved or configured before compilation. This
+small dependency surface is intended for Wasm sandboxes and agent runtimes where
+configuration-free startup matters.
 
-- `docs/architecture.md`：分层与依赖拓扑。
-- `docs/adr/`：四项已定案的架构决定。
-- `docs/error-taxonomy.md`：数值失效模式与错误语义。
-- `docs/testing-strategy.md`：差分测试策略。
-- `docs/benchmark-plan.md`：基准计划与指标。
-- `docs/milestones.md`：里程碑与砍单顺序。
-- `docs/positioning.md`：生态定位与上游边界。
-- `docs/publishing-checklist.md`：打包与发布检查。
+## Quick start
 
-## 许可证
+The examples assume these package aliases are available in the consuming
+`moon.pkg`:
 
-本仓库使用 Apache-2.0 许可证，详见根目录 `LICENSE`。
+```moonbit
+import {
+  "hp0200/moonbit-iterative-solvers/diagnostics" @diagnostics,
+  "hp0200/moonbit-iterative-solvers/solvers" @solvers,
+  "hp0200/moonbit-iterative-solvers/verification" @verification,
+}
+```
+
+### 1. Solve and turn a failure into an agent action
+
+```moonbit
+fn solve_and_handle_failure() -> Unit {
+  let matrix : Array[Array[Float]] = [[0.0, 0.0], [0.0, 0.0]]
+  let b : Array[Float] = [1.0, 2.0]
+
+  match @solvers.solve(matrix, b) {
+    Ok(_) => println("unexpected success")
+    Err(diagnostic) => {
+      let code = @diagnostics.SolverDiagnostic::error_code(diagnostic)
+      let hint = @diagnostics.SolverDiagnostic::agent_hint(diagnostic)
+      println("error_code = \{code}")
+      println("agent_hint = \{hint}")
+    }
+  }
+}
+```
+
+### 2. Verify a candidate solution independently
+
+```moonbit
+fn verify_candidate_solution() -> Unit {
+  let matrix : Array[Array[Float]] = [[4.0, 1.0], [1.0, 3.0]]
+  let b : Array[Float] = [6.0, 7.0]
+  let x : Array[Float] = [1.0, 2.0]
+
+  let report = @verification.verify_solution(matrix, b, x)
+  if report.is_valid {
+    println("valid: residual_norm=\{report.residual_norm}")
+    println("relative_error=\{report.relative_error}")
+  } else {
+    println("candidate rejected")
+  }
+}
+```
+
+### 3. Read diagnostic context for an agent decision
+
+```moonbit
+fn inspect_diagnostic_context() -> Unit {
+  let matrix : Array[Array[Float]] = [[0.0, 0.0], [0.0, 0.0]]
+  let b : Array[Float] = [1.0, 2.0]
+
+  match @solvers.solve(matrix, b) {
+    Ok(_) => println("unexpected success")
+    Err(diagnostic) => {
+      let code = @diagnostics.SolverDiagnostic::error_code(diagnostic)
+      if code == "SINGULAR_PIVOT" {
+        match
+          @diagnostics.SolverDiagnostic::context_value(
+            diagnostic,
+            "iteration_count",
+          ) {
+          Some(value) => println("iteration_count=\{value}")
+          None => println("iteration_count unavailable")
+        }
+        match
+          @diagnostics.SolverDiagnostic::context_value(diagnostic, "pivot") {
+          Some(value) => println("pivot=\{value}")
+          None => println("pivot unavailable")
+        }
+        println(
+          "next action = \{@diagnostics.SolverDiagnostic::agent_hint(diagnostic)}",
+        )
+      }
+    }
+  }
+}
+```
+
+## Architecture
+
+```text
+src/diagnostics/   diagnostics, stable codes, and context maps
+src/verification/  independent residual verification
+src/solvers/       dense reference CG
+docs/adr/          architecture decisions
+```
+
+Only internal module dependencies are used:
+
+```text
+src/verification ──▶ src/diagnostics
+src/solvers      ──▶ src/diagnostics
+```
+
+`diagnostics` has no package dependencies. This keeps the diagnosis model
+reusable by verification and solver callers without pulling in a matrix backend.
+
+## Supported targets
+
+![moon check](https://img.shields.io/badge/moon_check-passing-brightgreen)
+![moon test](https://img.shields.io/badge/moon_test-12%2F12-brightgreen)
+![format check](https://img.shields.io/badge/moon_fmt--check-passing-brightgreen)
+![wasm-gc](https://img.shields.io/badge/wasm--gc_check%2Ftest-passing-brightgreen)
+![js](https://img.shields.io/badge/js_check%2Ftest-passing-brightgreen)
+![native check](https://img.shields.io/badge/native_check-passing-brightgreen)
+![native test](https://img.shields.io/badge/native_test-environment_blocked-yellow)
+
+| Target | `moon check` | `moon test` |
+| --- | --- | --- |
+| default | passing | 12/12 passing |
+| `wasm-gc` | passing | 12/12 passing |
+| `js` | passing | 12/12 passing |
+| `native` | passing | not built in this environment |
+
+The native test executable could not be built on the current machine because the
+local MSVC C++ toolchain and Windows SDK are unavailable. That is a local
+toolchain limitation, not a reported source failure. No native test result is
+claimed here.
+
+## Validation and tests
+
+Observed on the current checkout:
+
+| Command | Result |
+| --- | --- |
+| `moon check` | passing |
+| `moon test` | 12 tests passed, 0 failed |
+| `moon fmt --check` | passing |
+| `moon check --target wasm-gc` | passing |
+| `moon test --target wasm-gc` | 12 tests passed, 0 failed |
+| `moon check --target js` | passing |
+| `moon test --target js` | 12 tests passed, 0 failed |
+| `moon check --target native` | passing |
+| `moon test --target native` | environment-blocked before test execution |
+
+The tests cover diagnostic fields and context, valid and invalid independent
+verification, NaN input, dimension and matrix-shape failures, CG convergence
+through independent verification, singular pivots, and the short-column `2x1`
+regression.
+
+## Design decisions
+
+The zero-dependency diagnostic-engine decision is recorded in
+`docs/adr/0007-zero-dependency-diagnostic-engine.md`. It supersedes ADR-1 through
+ADR-6, which describe the earlier sparse-solver architecture and remain only as
+historical records.
+
+## Scope and boundaries
+
+This library does not implement:
+
+- sparse matrix storage or format conversion;
+- a high-performance matrix kernel;
+- preconditioners, BiCGSTAB, GMRES, or other solvers;
+- FFI or a wasm/js export surface;
+- performance, throughput, or convergence claims beyond the observed tests.
+
+It is not a replacement for sparse-math or floating-point utility libraries;
+their responsibilities are different. This project concentrates on the solver
+interface, structured failure reporting, and independent verification of a
+result.
+
+## License
+
+Apache-2.0. See `LICENSE`.
