@@ -21,6 +21,7 @@ jobs:
 
       - name: Install MoonBit
         run: |
+          export MOONBIT_INSTALL_VERSION="0.10.19+bee578715"
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
@@ -45,6 +46,7 @@ jobs:
 
       - name: Install MoonBit
         run: |
+          export MOONBIT_INSTALL_VERSION="0.10.19+bee578715"
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
