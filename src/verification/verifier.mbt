@@ -153,6 +153,10 @@ fn make_report(residual_norm : Float, rhs_norm : Float) -> VerificationReport {
 /// The residual is recomputed as `r = b - Ax`. Malformed or non-finite inputs
 /// produce an invalid report instead of a panic. Use
 /// `verify_solution_with_diagnostic` when the failure reason is needed.
+///
+/// This function checks only the residual; it does not decide credibility.
+/// Use `verify_solution_with_credibility` when the caller needs to know
+/// whether a small residual supports accepting the solution.
 pub fn verify_solution(
   matrix : Array[Array[Float]],
   b : Array[Float],
