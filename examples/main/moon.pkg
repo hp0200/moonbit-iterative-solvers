@@ -1,0 +1,7 @@
+import {
+  "hp0200/moonbit-iterative-solvers/diagnostics",
+  "hp0200/moonbit-iterative-solvers/solvers",
+  "hp0200/moonbit-iterative-solvers/verification",
+}
+
+pkgtype(kind: "executable")
